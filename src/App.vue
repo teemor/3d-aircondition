@@ -6,6 +6,7 @@ import {
   getAlarms,
   getGauges,
   getTodayOverview,
+  getAbnormalDevices,
 } from "./api/api.js";
 import DashboardDialogs from "./components/DashboardDialogs.vue";
 import { steps, stepClass } from "./utils/workflow.js";
@@ -66,8 +67,10 @@ async function refresh() {
     getAlarms(),
     getGauges(),
     getTodayOverview(),
+    getAbnormalDevices(),
   ];
-  const [state, alarm, gauge, train] = await Promise.allSettled(tasks);
+  const [state, alarm, gauge, train, abnormal] =
+    await Promise.allSettled(tasks);
   if (state.status === "fulfilled") {
     counts.value = state.value.counts || {};
     scene.value?.updateStates(state.value.states);
@@ -75,6 +78,8 @@ async function refresh() {
   if (alarm.status === "fulfilled") alarms.value = alarm.value.data || [];
   if (gauge.status === "fulfilled") gauges.value = gauge.value.data || {};
   if (train.status === "fulfilled") trains.value = train.value.data || [];
+  if (abnormal.status === "fulfilled")
+    scene.value?.updateAbnormal(abnormal.value.data || []);
   if (state.status === "rejected")
     console.error("设备状态更新失败", state.reason);
 }
@@ -205,6 +210,25 @@ onUnmounted(() => {
         </div>
       </section>
     </div>
+    <!--
+      原 air.js 中被注释的“今日作业人员 / 完成数量”面板，按原样保留为注释。
+      完成数量对应接口 emisdp/beatNum（见 api.js getBeatStats）。
+    <div class="personListbodyclass" style="width: 21%">
+      <div class="pertitlebg">今日作业人员</div>
+      <div class="srcollbg">
+        <div class="personone" v-for="item in persons" :key="item.nickName">
+          <div class="nameLine"><span>{{ item.nickName }}</span></div>
+          <div class="ren_star">
+            <span v-for="j in Number(item.star || 0)" :key="j">★</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="personListbodyclass" style="width: 26%">
+      <div class="pertitlebg">完成数量</div>
+      <div class="perdetailbg"><div id="lineChartarr"></div></div>
+    </div>
+    -->
     <nav class="menu">
       <button
         v-for="item in menus"
@@ -218,6 +242,43 @@ onUnmounted(() => {
         ><span :style="{ color: item.color }">{{ item.label }}</span>
       </button>
     </nav>
+    <!--
+      原 air.js 中被注释的入口（todayTotal / panellist），按原样保留为注释：
+      今日收入空调 -> 机辆检修记录（jxjlList?type=today）
+      今日作业空调 -> dpListA2；修竣数量 -> dpListA3
+      待开工 -> dpListB7；挂起 -> dpListB6
+    <div class="bottom_center">
+      <div class="center_number" @click="dialogs?.openMaintenance()">
+        <b>{{ counts.srNum ?? "" }}</b><span>今日收入空调</span>
+      </div>
+      <div
+        class="center_number"
+        @click="dialogs?.openRecords('todayWork', '空调机组今日作业记录')"
+      >
+        <b>{{ counts.zyNum ?? "" }}</b><span>今日作业空调</span>
+      </div>
+      <div
+        class="center_number"
+        @click="dialogs?.openRecords('finished', '空调机组修竣记录')"
+      >
+        <b>{{ counts.xjNum ?? "" }}</b><span>修竣数量</span>
+      </div>
+    </div>
+    <div class="panellist">
+      <div
+        class="panelboxt"
+        @click="dialogs?.openRecords('pending', '空调机组待开工记录')"
+      >
+        <b>{{ counts.dclNum ?? "" }}</b><span>待开工</span>
+      </div>
+      <div
+        class="panelboxt"
+        @click="dialogs?.openRecords('hung', '空调机组挂起记录')"
+      >
+        <b>{{ counts.gqNum ?? "" }}</b><span>挂起</span>
+      </div>
+    </div>
+    -->
     <DashboardDialogs ref="dialogs" :counts="counts" :trains="trains" />
   </main>
 </template>

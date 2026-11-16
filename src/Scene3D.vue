@@ -22,6 +22,8 @@ let renderer,
 const deviceMaterials = new Map();
 const anchors = new Map();
 const equipNodes = new Map();
+const statusColors = new Map();
+const blinkTimers = new Map();
 let sanreqiNode, lengningjiNode, tongfengjiNode;
 const panelItems = ref([]);
 let pendingStates = [];
@@ -40,7 +42,7 @@ const names = {
   743220004: ["性能试验台", "空调机组性能试验"],
 };
 const iconMap = {
-  1: "green.png",
+  1: "biaoj d.png",
   3: "red.png",
   4: "chao d.png",
   5: "zi.png",
@@ -52,12 +54,13 @@ function fitModel(root) {
   const box = new THREE.Box3().setFromObject(root);
   const size = box.getSize(new THREE.Vector3());
   root.position.sub(box.getCenter(new THREE.Vector3()));
-  const distance = Math.max(size.x, size.y, size.z) * 0.8;
-  camera.position.set(0, distance * 0.75, distance * 1.2);
+  const distance = Math.max(size.x, size.y, size.z) * 0.88;
+  const verticalOffset = distance * 0.1;
+  camera.position.set(0, distance * 0.77, distance * 0.74);
   camera.near = Math.max(0.01, distance / 1000);
   camera.far = distance * 20;
   camera.updateProjectionMatrix();
-  controls.target.set(0, 0, 0);
+  controls.target.set(0, verticalOffset, 0);
   controls.minDistance = distance * 0.35;
   controls.maxDistance = distance * 3;
   controls.update();
@@ -84,7 +87,17 @@ function indexDevices(root) {
       if (!child.isMesh) return;
       child.userData.deviceId = id;
       const materials = (Array.isArray(child.material) ? child.material : [child.material]).map(
-        (material) => material.clone(),
+        (material) => {
+          const clone = material.clone();
+          // 记录原始颜色，颜色置空时还原（对应旧版 style.color = null）。
+          clone.userData = {
+            ...clone.userData,
+            baseColor: material.color?.clone(),
+            baseEmissive: material.emissive?.clone(),
+            baseEmissiveIntensity: material.emissiveIntensity,
+          };
+          return clone;
+        },
       );
       child.material = Array.isArray(child.material) ? materials : materials[0];
       deviceMaterials.set(id, [...(deviceMaterials.get(id) || []), ...materials]);
@@ -113,6 +126,54 @@ function updateVisibility(items) {
   }
 }
 
+function paintMaterial(material, color) {
+  if (color) {
+    material.color?.set(color);
+    material.emissive?.set(color);
+    if ("emissiveIntensity" in material) material.emissiveIntensity = 0.08;
+    return;
+  }
+  const base = material.userData;
+  if (base?.baseColor && material.color) material.color.copy(base.baseColor);
+  if (base?.baseEmissive && material.emissive) material.emissive.copy(base.baseEmissive);
+  if ("emissiveIntensity" in material && base?.baseEmissiveIntensity !== undefined)
+    material.emissiveIntensity = base.baseEmissiveIntensity;
+}
+
+function paintDevice(id, color) {
+  for (const material of deviceMaterials.get(id) || []) paintMaterial(material, color);
+}
+
+function stopBlink(id) {
+  const timer = blinkTimers.get(id);
+  if (timer) clearInterval(timer);
+  blinkTimers.delete(id);
+  paintDevice(id, statusColors.get(id) || "");
+}
+
+// 异常设备 300ms 红色闪烁（原 vue.js getState：queryCardByTw + setInterval）。
+function updateAbnormal(items) {
+  const abnormal = new Set(
+    (Array.isArray(items) ? items : [])
+      .filter((item) => String(item.yichang) === "1")
+      .map((item) => String(item.twCode)),
+  );
+  for (const id of [...blinkTimers.keys()]) {
+    if (!abnormal.has(id)) stopBlink(id);
+  }
+  for (const id of abnormal) {
+    if (blinkTimers.has(id) || !deviceMaterials.has(id)) continue;
+    let red = false;
+    blinkTimers.set(
+      id,
+      setInterval(() => {
+        red = !red;
+        paintDevice(id, red ? "#FF4242" : statusColors.get(id) || "");
+      }, 300),
+    );
+  }
+}
+
 function updateStates(items) {
   pendingStates = items || [];
   updateVisibility(pendingStates);
@@ -125,6 +186,7 @@ function updateStates(items) {
     )
     .map((item) => ({ ...item, id: String(item.sbllid) }));
   for (const item of pendingStates) {
+    const key = String(item.sbllid);
     const status = item.state || [];
     const color =
       status.includes(4) || status.includes(7)
@@ -134,11 +196,10 @@ function updateStates(items) {
           : status.includes(5) || status.includes(6)
             ? "#40c98f"
             : "";
-    for (const material of deviceMaterials.get(String(item.sbllid)) || []) {
-      material.color?.set(color);
-      material.emissive?.set(color);
-      if ("emissiveIntensity" in material) material.emissiveIntensity = 0.08;
-    }
+    statusColors.set(key, color);
+    // 闪烁期间由定时器控制颜色，避免被每 10 秒的刷新覆盖。
+    if (blinkTimers.has(key)) continue;
+    paintDevice(key, color);
   }
 }
 
@@ -233,6 +294,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(animationFrame);
+  for (const timer of blinkTimers.values()) clearInterval(timer);
+  blinkTimers.clear();
   resizeObserver?.disconnect();
   renderer?.domElement.removeEventListener("pointerdown", onPointerDown);
   controls?.dispose();
@@ -243,7 +306,7 @@ onUnmounted(() => {
   });
   renderer?.dispose();
 });
-defineExpose({ updateStates });
+defineExpose({ updateStates, updateAbnormal });
 </script>
 
 <template>

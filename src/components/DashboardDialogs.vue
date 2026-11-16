@@ -6,6 +6,7 @@ import OverviewDialog from "./OverviewDialog.vue";
 import DeviceDialog from "./DeviceDialog.vue";
 import StepDetailDialog from "./StepDetailDialog.vue";
 import WorkCardDialog from "./WorkCardDialog.vue";
+import MaintenanceDialog from "./MaintenanceDialog.vue";
 import DialogTable from "./DialogTable.vue";
 import FilePreviewDialog from "./FilePreviewDialog.vue";
 const props = defineProps({ counts: Object, trains: Array });
@@ -14,6 +15,8 @@ const state = useDialogs(counts, trains);
 // 对外仅暴露业务入口，首页不再维护各弹窗内部字段。
 defineExpose({
   openMenu: state.openMenu,
+  openRecords: state.openRecords,
+  openMaintenance: state.openMaintenance,
   openDevice: state.openDevice,
   openModelWork: state.openModelWork,
   openStep: state.openStep,
@@ -25,6 +28,7 @@ defineExpose({
     <DeviceDialog v-else-if="state.modal === 'device'" :state="state" />
     <StepDetailDialog v-else-if="state.modal === 'step'" :state="state" />
     <WorkCardDialog v-else-if="state.modal === 'card'" :state="state" />
+    <MaintenanceDialog v-else-if="state.modal === 'maintenance'" :state="state" />
     <DialogTable v-else :state="state" />
   </BaseDialog>
   <FilePreviewDialog

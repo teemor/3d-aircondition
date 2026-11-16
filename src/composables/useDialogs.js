@@ -11,7 +11,17 @@ import {
   getWorkDetail,
   getWorkExceptions,
   getWorkCards,
+  getMaintenanceRecords,
 } from "../api/api.js";
+
+const pad = (value) => String(value).padStart(2, "0");
+const formatDay = (date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const beforeDay = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return formatDay(date);
+};
 
 // 管理弹窗数据、分页和返回关系；界面由 components 中的独立组件负责。
 export function useDialogs(counts, trains) {
@@ -37,6 +47,9 @@ export function useDialogs(counts, trains) {
     overviewCounts = ref({});
   const workDevice = ref(""),
     workTrain = ref("");
+  const recordKind = ref("todayWork"),
+    maintenanceTab = ref("today"),
+    maintenanceRange = ref([beforeDay(7), formatDay(new Date())]);
   const cardIndex = ref(0),
     returnModal = ref(""),
     returnTitle = ref(""),
@@ -120,6 +133,39 @@ export function useDialogs(counts, trains) {
         ["gzxx", "故障现象"],
         ["wxzt", "维修状态"],
       ];
+    if (modal.value === "records" && recordKind.value === "hung")
+      return [
+        ["rwgdCzh", "车组号"],
+        ["zysc", "作业时长"],
+        ["zwkssj", "挂起开始"],
+        ["zwjssj", "挂起结束"],
+        ["rwgdJsrName", "接收人"],
+        ["rwgdStatus", "任务状态"],
+      ];
+    if (modal.value === "records" && recordKind.value === "pending")
+      return [
+        ["rwgdCzh", "车组号"],
+        ["attribute27", "修程"],
+        ["attribute28", "作业名称"],
+        ["rwgdJhks", "计划开始"],
+        ["rwgdJhjs", "计划结束"],
+        ["rwgdJsrName", "接收人"],
+      ];
+    // 检修记录列（原 dialog.js recordDialog）。
+    if (modal.value === "maintenance")
+      return [
+        ["czh", "车组号"],
+        ["fjr", "分解人"],
+        ["qxr", "清洗人"],
+        ["tfj", "通风机试验人"],
+        ["lnj", "冷凝机试验人"],
+        ["yrq", "预热器试验人"],
+        ["zzr", "组装人"],
+        ["jxr", "检修人"],
+        ["xn", "性能试验人"],
+        ["rwgdSjks", "开工时间"],
+        ["rwgdSjjs", "完工时间"],
+      ];
     if (modal.value === "overview" && tab.value === "all")
       return [["czh", "车组号"], ...steps.map((item) => [item.key, item.name])];
     return workColumns;
@@ -163,6 +209,22 @@ export function useDialogs(counts, trains) {
           rows.value = result.data?.rows || [];
           total.value = result.data?.total || 0;
         }
+      } else if (modal.value === "records") {
+        result = await getDashboardList(recordKind.value, page.value);
+        rows.value = result.rows || result.data?.rows || [];
+        total.value = result.total || result.data?.total || 0;
+      } else if (modal.value === "maintenance") {
+        result = await getMaintenanceRecords(page.value, {
+          type: maintenanceTab.value,
+          ...(maintenanceTab.value === "history"
+            ? {
+                rwgdSjks: maintenanceRange.value[0],
+                rwgdSjjs: maintenanceRange.value[1],
+              }
+            : {}),
+        });
+        rows.value = result.data?.rows || result.rows || [];
+        total.value = result.data?.total || result.total || 0;
       } else {
         const count =
           counts.value[
@@ -192,6 +254,32 @@ export function useDialogs(counts, trains) {
           overviewCounts.value = res.data || {};
         })
         .catch(console.error);
+    await loadList();
+  }
+  // 机组记录弹窗（原 vue.js：gotoToday、gotoXiujun、gotogq、gotodl）。
+  async function openRecords(kind, label) {
+    modal.value = "records";
+    recordKind.value = kind;
+    title.value = label;
+    page.value = 1;
+    await loadList();
+  }
+  // 机辆检修记录（原 vue.js：gotodaybottom + dialog.js recordDialog）。
+  async function openMaintenance() {
+    modal.value = "maintenance";
+    title.value = "机辆检修记录";
+    maintenanceTab.value = "today";
+    maintenanceRange.value = [beforeDay(7), formatDay(new Date())];
+    page.value = 1;
+    await loadList();
+  }
+  async function changeMaintenanceTab(value) {
+    maintenanceTab.value = value;
+    page.value = 1;
+    await loadList();
+  }
+  async function searchMaintenance() {
+    page.value = 1;
     await loadList();
   }
   async function openDevice(id) {
@@ -327,12 +415,19 @@ export function useDialogs(counts, trains) {
     overviewCounts,
     cardIndex,
     previewFile,
+    recordKind,
+    maintenanceTab,
+    maintenanceRange,
     columns,
     steps,
     display,
     stepClass,
     loadList,
     openMenu,
+    openRecords,
+    openMaintenance,
+    changeMaintenanceTab,
+    searchMaintenance,
     openDevice,
     openModelWork,
     changeDeviceTab,

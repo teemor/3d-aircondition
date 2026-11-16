@@ -64,6 +64,19 @@ export const getAlarms = () => request("emisdp/scycWarning", { type: 1 });
 export const getGauges = () =>
   request("emisdp/jldj", { type: 1, pageNum: 1, pageSize: 5 });
 
+// 3D 场景异常设备：yichang 为 1 的设备以 300ms 红色闪烁（原 vue.js getState）。
+export const getAbnormalDevices = () =>
+  request("emisdp/queryCardByTw", {}, { twList: deviceIds });
+
+// 机辆检修记录（原 dialog.js recordDialog）：type=today|history，
+// 历史分支需 rwgdSjks / rwgdSjjs（YYYY-MM-DD）。
+export const getMaintenanceRecords = (page, params = {}) =>
+  request("emisdp/jxjlList", { ...pagination(page), ...params });
+
+// 完成数量折线图（原 vue.js initLineCharts，air.js 模板中已注释）。
+export const getBeatStats = () =>
+  request("emisdp/beatNum", { type: 1, queryType: "KT_3D" });
+
 // 今日总览全部、今日总览tab、今日总览分页。
 export const getTodayOverview = () =>
   request("emisdp/queryTodayZl2", overviewParams());
@@ -91,13 +104,17 @@ export const getDeviceRepairs = (page, deviceId) =>
     sbllid: deviceId,
   });
 
-// 作业中弹窗、作业超时弹窗、待料异常弹窗、生产异常弹窗、设备故障弹窗。
+// 作业中弹窗、作业超时弹窗、待料异常弹窗、生产异常弹窗、设备故障弹窗、机组记录弹窗。
 const listPaths = {
   working: "emisdp/dpListB1",
   timeout: "emisdp/dpListB2",
   material: "emisdp/dpListB3",
   production: "emisdp/dpListB4",
   fault: "emisdp/dpListB5",
+  todayWork: "emisdp/dpListA2",
+  finished: "emisdp/dpListA3",
+  hung: "emisdp/dpListB6",
+  pending: "emisdp/dpListB7",
 };
 export function getDashboardList(kind, page, total = 0) {
   if (!listPaths[kind]) throw new Error("未知的列表类型");
